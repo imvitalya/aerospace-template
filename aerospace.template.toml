@@ -1,7 +1,7 @@
 # ЭТОТ ФАЙЛ — ШАБЛОН. Реальный ~/.aerospace.toml генерируется из него скриптом
 # ~/.aerospace-render.sh (там же, вверху скрипта — переменные с именами воркспейсов).
 # Правь ИМЕНА воркспейсов только в render-скрипте, а логику/хоткеи/правила — здесь,
-# используя плейсхолдеры __WS_MAIN__ / __WS_OTHER__ / __WS_CODING__ / __WS_SEARCH__
+# используя плейсхолдеры __WS_MAIN__ / __WS_OTHER__ / __WS_HACKING__ / __WS_SEARCH__
 # вместо конкретных имён. После правки шаблона запусти: ~/.aerospace-render.sh
 #
 # Плейсхолдеры именованы по РОЛИ воркспейса, а не по позиции — потому что физическая
@@ -70,13 +70,13 @@ automatically-unhide-macos-hidden-apps = true
 # persistent-workspaces = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B",
 #                         "C", "D", "E", "F", "G", "I", "M", "N", "O", "P", "Q",
 #                         "R", "S", "T", "U", "V", "W", "X", "Y", "Z"]
-# 4 воркспейса, переключаются через ctrl-s/c/m/o (см. [mode.main.binding] ниже) —
+# 4 воркспейса, переключаются через ctrl-s/h/m/o (см. [mode.main.binding] ниже) —
 # физические клавиши НЕ зависят от имени воркспейса, менять их не нужно при переименовании.
 # Порядок в списке ниже — это порядок группировки/цикла cmd-j/cmd-k (search → coding →
 # main → other), а НЕ порядок физических клавиш и НЕ алфавит (по умолчанию AeroSpace
 # сам крутит workspace next/prev по алфавиту — здесь этот порядок переопределён явно,
 # см. cmd-j/cmd-k в [mode.main.binding]).
-persistent-workspaces = ["__WS_SEARCH__", "__WS_CODING__", "__WS_MAIN__", "__WS_OTHER__"]
+persistent-workspaces = ["__WS_SEARCH__", "__WS_HACKING__", "__WS_MAIN__", "__WS_OTHER__"]
 
 # Все окна открываются как floating (не управляются тайлингом/accordion) — благодаря
 # этому Rectangle может свободно resize/двигать их, и aerospace никогда не "отжимает"
@@ -176,19 +176,18 @@ gaps.outer.right =      0
     alt-equal = 'resize smart +50'
 
     # См.: https://nikitabobko.github.io/AeroSpace/commands#workspace
-    # ВНИМАНИЕ: ctrl-c глобально перехватывает Ctrl+C у ВСЕХ приложений, включая
-    # терминалы (там Ctrl+C — это SIGINT, прерывание процесса). Осознанный выбор по
-    # просьбе — как и ctrl-d/ctrl-f, которые тоже пересекаются с readline-биндингами.
-    # Физические клавиши фиксированы и НЕ зависят от того, как воркспейс называется
-    # сейчас — имя подставляется из переменных __WS_*__ при генерации.
+    # ctrl-h выбран специально НЕ как ctrl-c: Ctrl-H в readline — это backspace, его
+    # никто не жмёт как осознанный chord (все жмут физический Backspace), в отличие от
+    # Ctrl-C (SIGINT) — тот ломать нельзя. Физические клавиши фиксированы и НЕ зависят
+    # от того, как воркспейс называется сейчас — имя подставляется из __WS_*__ при генерации.
     ctrl-s = 'workspace __WS_SEARCH__'
-    ctrl-c = 'workspace __WS_CODING__'
+    ctrl-h = 'workspace __WS_HACKING__'
     ctrl-m = 'workspace __WS_MAIN__'
     ctrl-o = 'workspace __WS_OTHER__'
 
     # См.: https://nikitabobko.github.io/AeroSpace/commands#move-node-to-workspace
     ctrl-shift-s = 'move-node-to-workspace __WS_SEARCH__'
-    ctrl-shift-c = 'move-node-to-workspace __WS_CODING__'
+    ctrl-shift-h = 'move-node-to-workspace __WS_HACKING__'
     ctrl-shift-m = 'move-node-to-workspace __WS_MAIN__'
     ctrl-shift-o = 'move-node-to-workspace __WS_OTHER__'
 
@@ -210,8 +209,8 @@ gaps.outer.right =      0
     # встроенной команды передаём явный порядок через --stdin: cmd-j = index-1 (prev),
     # cmd-k = index+1 (next), с переносом через край (--wrap-around).
     # См.: https://nikitabobko.github.io/AeroSpace/commands#workspace
-    cmd-j = '''exec-and-forget /bin/sh -c "printf '__WS_SEARCH__\n__WS_CODING__\n__WS_MAIN__\n__WS_OTHER__\n' | /opt/homebrew/bin/aerospace workspace prev --stdin --wrap-around"'''
-    cmd-k = '''exec-and-forget /bin/sh -c "printf '__WS_SEARCH__\n__WS_CODING__\n__WS_MAIN__\n__WS_OTHER__\n' | /opt/homebrew/bin/aerospace workspace next --stdin --wrap-around"'''
+    cmd-j = '''exec-and-forget /bin/sh -c "printf '__WS_SEARCH__\n__WS_HACKING__\n__WS_MAIN__\n__WS_OTHER__\n' | /opt/homebrew/bin/aerospace workspace prev --stdin --wrap-around"'''
+    cmd-k = '''exec-and-forget /bin/sh -c "printf '__WS_SEARCH__\n__WS_HACKING__\n__WS_MAIN__\n__WS_OTHER__\n' | /opt/homebrew/bin/aerospace workspace next --stdin --wrap-around"'''
 
     # ctrl-shift-j / ctrl-shift-k сознательно НЕ забиндены здесь.
     # AeroSpace не умеет resize в процентах и не двигает/центрирует окна — только
