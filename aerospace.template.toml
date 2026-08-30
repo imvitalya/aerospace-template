@@ -1,8 +1,12 @@
 # ЭТОТ ФАЙЛ — ШАБЛОН. Реальный ~/.aerospace.toml генерируется из него скриптом
-# ~/.aerospace-render.sh (там же, вверху скрипта — 4 переменные с именами воркспейсов).
+# ~/.aerospace-render.sh (там же, вверху скрипта — переменные с именами воркспейсов).
 # Правь ИМЕНА воркспейсов только в render-скрипте, а логику/хоткеи/правила — здесь,
-# используя плейсхолдеры __WS1__ / __WS2__ / __WS3__ / __WS4__ вместо конкретных имён.
-# После правки шаблона запусти: ~/.aerospace-render.sh
+# используя плейсхолдеры __WS_MAIN__ / __WS_OTHER__ / __WS_CODING__ / __WS_SEARCH__
+# вместо конкретных имён. После правки шаблона запусти: ~/.aerospace-render.sh
+#
+# Плейсхолдеры именованы по РОЛИ воркспейса, а не по позиции — потому что физическая
+# клавиша (m/o/c/s) и порядок в группировке/цикле cmd-j/cmd-k теперь независимы друг
+# от друга (см. persistent-workspaces и cmd-j/cmd-k ниже).
 
 # Версия конфигурации для совместимости и устаревших параметров
 # См.: https://nikitabobko.github.io/AeroSpace/guide#config-version
@@ -16,6 +20,9 @@ config-version = 2
 after-startup-command = [
     'exec-and-forget open -a "Twilight"',
     'exec-and-forget open -a "Happ"',
+    # main — основной воркспейс: фокус после логина должен оказаться именно на нём,
+    # даже если он не первый в persistent-workspaces/группировке ниже.
+    'workspace __WS_MAIN__',
 ]
 
 # Запускать AeroSpace при входе в систему
@@ -63,9 +70,13 @@ automatically-unhide-macos-hidden-apps = true
 # persistent-workspaces = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B",
 #                         "C", "D", "E", "F", "G", "I", "M", "N", "O", "P", "Q",
 #                         "R", "S", "T", "U", "V", "W", "X", "Y", "Z"]
-# 4 воркспейса, переключаются через ctrl-m/o/d/f (см. [mode.main.binding] ниже) —
+# 4 воркспейса, переключаются через ctrl-s/c/m/o (см. [mode.main.binding] ниже) —
 # физические клавиши НЕ зависят от имени воркспейса, менять их не нужно при переименовании.
-persistent-workspaces = ["__WS1__", "__WS2__", "__WS3__", "__WS4__"]
+# Порядок в списке ниже — это порядок группировки/цикла cmd-j/cmd-k (search → coding →
+# main → other), а НЕ порядок физических клавиш и НЕ алфавит (по умолчанию AeroSpace
+# сам крутит workspace next/prev по алфавиту — здесь этот порядок переопределён явно,
+# см. cmd-j/cmd-k в [mode.main.binding]).
+persistent-workspaces = ["__WS_SEARCH__", "__WS_CODING__", "__WS_MAIN__", "__WS_OTHER__"]
 
 # Все окна открываются как floating (не управляются тайлингом/accordion) — благодаря
 # этому Rectangle может свободно resize/двигать их, и aerospace никогда не "отжимает"
@@ -79,12 +90,12 @@ persistent-workspaces = ["__WS1__", "__WS2__", "__WS3__", "__WS4__"]
 # открытого при старте системы (см. after-startup-command выше), и для окна, которое
 # приложение открыло само по себе — источник не важен, важен только app-bundle-id.
 on-window-detected = [
-    # __WS1__: Twilight (Zen Browser)
-    { if = 'test %{app-bundle-id} = app.zen-browser.zen', run = ['layout floating', 'move-node-to-workspace __WS1__'] },
-    # __WS2__: Happ, Telegram, Spotify
-    { if = 'test %{app-bundle-id} = com.happ.www', run = ['layout floating', 'move-node-to-workspace __WS2__'] },
-    { if = 'test %{app-bundle-id} = ru.keepcoder.Telegram', run = ['layout floating', 'move-node-to-workspace __WS2__'] },
-    { if = 'test %{app-bundle-id} = com.spotify.client', run = ['layout floating', 'move-node-to-workspace __WS2__'] },
+    # __WS_MAIN__: Twilight (Zen Browser)
+    { if = 'test %{app-bundle-id} = app.zen-browser.zen', run = ['layout floating', 'move-node-to-workspace __WS_MAIN__'] },
+    # __WS_OTHER__: Happ, Telegram, Spotify
+    { if = 'test %{app-bundle-id} = com.happ.www', run = ['layout floating', 'move-node-to-workspace __WS_OTHER__'] },
+    { if = 'test %{app-bundle-id} = ru.keepcoder.Telegram', run = ['layout floating', 'move-node-to-workspace __WS_OTHER__'] },
+    { if = 'test %{app-bundle-id} = com.spotify.client', run = ['layout floating', 'move-node-to-workspace __WS_OTHER__'] },
     # Всё остальное — просто floating, без привязки к воркспейсу
     { if = 'true', run = 'layout floating' },
 ]
@@ -165,18 +176,21 @@ gaps.outer.right =      0
     alt-equal = 'resize smart +50'
 
     # См.: https://nikitabobko.github.io/AeroSpace/commands#workspace
-    # Физические клавиши фиксированы (m/o/d/f) и НЕ зависят от того, как воркспейс
-    # называется сейчас — имя подставляется из переменных __WS1..4__ при генерации.
-    ctrl-m = 'workspace __WS1__'
-    ctrl-o = 'workspace __WS2__'
-    ctrl-d = 'workspace __WS3__'
-    ctrl-f = 'workspace __WS4__'
+    # ВНИМАНИЕ: ctrl-c глобально перехватывает Ctrl+C у ВСЕХ приложений, включая
+    # терминалы (там Ctrl+C — это SIGINT, прерывание процесса). Осознанный выбор по
+    # просьбе — как и ctrl-d/ctrl-f, которые тоже пересекаются с readline-биндингами.
+    # Физические клавиши фиксированы и НЕ зависят от того, как воркспейс называется
+    # сейчас — имя подставляется из переменных __WS_*__ при генерации.
+    ctrl-s = 'workspace __WS_SEARCH__'
+    ctrl-c = 'workspace __WS_CODING__'
+    ctrl-m = 'workspace __WS_MAIN__'
+    ctrl-o = 'workspace __WS_OTHER__'
 
     # См.: https://nikitabobko.github.io/AeroSpace/commands#move-node-to-workspace
-    ctrl-shift-m = 'move-node-to-workspace __WS1__'
-    ctrl-shift-o = 'move-node-to-workspace __WS2__'
-    ctrl-shift-d = 'move-node-to-workspace __WS3__'
-    ctrl-shift-f = 'move-node-to-workspace __WS4__'
+    ctrl-shift-s = 'move-node-to-workspace __WS_SEARCH__'
+    ctrl-shift-c = 'move-node-to-workspace __WS_CODING__'
+    ctrl-shift-m = 'move-node-to-workspace __WS_MAIN__'
+    ctrl-shift-o = 'move-node-to-workspace __WS_OTHER__'
 
     # Переключение между окнами внутри воркспейса (как обычный alt+tab в ОС).
     # default-root-container-layout = 'accordion' + accordion-padding = 0 уже даёт
@@ -191,9 +205,13 @@ gaps.outer.right =      0
 
     # Переключение воркспейсов вперёд/назад по кругу (аналог cmd+j/k из Rectangle,
     # но самодостаточное — не зависит от внешних тулов, переживёт переезд на другой Mac).
+    # По умолчанию AeroSpace крутит workspace next/prev по АЛФАВИТУ, что не совпадает
+    # с нужной группировкой (search, coding, main, other) — поэтому вместо лёгкой
+    # встроенной команды передаём явный порядок через --stdin: cmd-j = index-1 (prev),
+    # cmd-k = index+1 (next), с переносом через край (--wrap-around).
     # См.: https://nikitabobko.github.io/AeroSpace/commands#workspace
-    cmd-j = 'workspace --wrap-around prev'
-    cmd-k = 'workspace --wrap-around next'
+    cmd-j = '''exec-and-forget /bin/sh -c "printf '__WS_SEARCH__\n__WS_CODING__\n__WS_MAIN__\n__WS_OTHER__\n' | /opt/homebrew/bin/aerospace workspace prev --stdin --wrap-around"'''
+    cmd-k = '''exec-and-forget /bin/sh -c "printf '__WS_SEARCH__\n__WS_CODING__\n__WS_MAIN__\n__WS_OTHER__\n' | /opt/homebrew/bin/aerospace workspace next --stdin --wrap-around"'''
 
     # ctrl-shift-j / ctrl-shift-k сознательно НЕ забиндены здесь.
     # AeroSpace не умеет resize в процентах и не двигает/центрирует окна — только
