@@ -1,242 +1,175 @@
-# ЭТОТ ФАЙЛ — ШАБЛОН. Реальный ~/.aerospace.toml генерируется из него скриптом
-# ~/.aerospace-render.sh (там же, вверху скрипта — переменные с именами воркспейсов).
-# Правь ИМЕНА воркспейсов только в render-скрипте, а логику/хоткеи/правила — здесь,
-# используя плейсхолдеры __WS_MAIN__ / __WS_OTHER__ / __WS_HACKING__ / __WS_SEARCH__
-# вместо конкретных имён. После правки шаблона запусти: ~/.aerospace-render.sh
+# AeroSpace template
+# Имена воркспейсов подставляются через ~/.aerospace-render.sh.
+# После изменения шаблона запускай: ~/.aerospace-render.sh
 #
-# Плейсхолдеры именованы по РОЛИ воркспейса, а не по позиции — потому что физическая
-# клавиша (m/o/c/s) и порядок в группировке/цикле cmd-j/cmd-k теперь независимы друг
-# от друга (см. persistent-workspaces и cmd-j/cmd-k ниже).
+# Переходы между воркспейсами идут через ~/.aerospace-ws.sh: он смотрит,
+# какие мониторы подключены, и без внешних мониторов собирает окна
+# из *-top и *-bottom в *-mac, а при их возврате раскладывает обратно.
 
-# Версия конфигурации для совместимости и устаревших параметров
-# См.: https://nikitabobko.github.io/AeroSpace/guide#config-version
-# Значение по умолчанию (если параметр не указан): config-version = 1
 config-version = 2
-
-# Здесь можно указать команды, которые выполняются после запуска AeroSpace.
-# Доступные команды: https://nikitabobko.github.io/AeroSpace/commands
-# Просто открываем приложения — на нужный воркспейс их раскидают правила
-# on-window-detected ниже (те же правила, что ловят и ручной запуск).
-after-startup-command = [
-    'exec-and-forget open -a "Twilight"',
-    'exec-and-forget open -a "Happ"',
-    # main — основной воркспейс: фокус после логина должен оказаться именно на нём,
-    # даже если он не первый в persistent-workspaces/группировке ниже.
-    'workspace __WS_MAIN__',
-]
-
-# Запускать AeroSpace при входе в систему
 start-at-login = true
-
-# Автоматически перезагружать конфигурацию после сохранения файла
-# После установки значения true один раз перезагрузите конфигурацию вручную, чтобы включить автоматическую перезагрузку
 auto-reload-config = true
 
-# Нормализация. См.: https://nikitabobko.github.io/AeroSpace/guide#normalization
+after-startup-command = [
+    'exec-and-forget /bin/bash __WS_SCRIPT__ startup __WS_MAIN__',
+    # Индикатор в меню-баре: только воркспейс с фокусом, без звёздочки
+    # (~/.aerospace-indicator.swift, собирается в ~/.aerospace-render.sh)
+    'exec-and-forget __WS_INDICATOR__',
+]
+
 enable-normalization-flatten-containers = true
 enable-normalization-opposite-orientation-for-nested-containers = true
 
-# См.: https://nikitabobko.github.io/AeroSpace/guide#layouts
-# 'accordion-padding' задаёт размер отступа в режиме аккордеона
-# Установите 0, чтобы отключить отступ
 accordion-padding = 0
-
-# Возможные значения: tiles|accordion
-# 'accordion' + accordion-padding = 0 ниже даёт поведение "окна друг за другом на весь
-# экран", без авто-деления по горизонтали/вертикали — переключение между ними см. alt-tab.
 default-root-container-layout = 'accordion'
-
-# Возможные значения: horizontal|vertical|auto
-# 'auto' означает: широкий монитор (ширина больше высоты) получает горизонтальную ориентацию,
-#               высокий монитор (высота больше ширины) получает вертикальную ориентацию
 default-root-container-orientation = 'auto'
 
-# Курсор мыши перемещается вслед за фокусом при смене активного монитора
-# Удалите этот параметр из конфигурации, если вам не нравится такое поведение
-# См. https://nikitabobko.github.io/AeroSpace/guide#on-focus-changed-callbacks
-# См. https://nikitabobko.github.io/AeroSpace/commands#move-mouse
-# Значение по умолчанию (если параметр не указан): on-focused-monitor-changed = []
-on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
-
-# Этот параметр позволяет фактически отключить функцию macOS «Скрыть приложение» (cmd-h)
-# Полезно, если вы не используете эту функцию macOS, но случайно нажимаете cmd-h или cmd-alt-h
-# Также см.: https://nikitabobko.github.io/AeroSpace/goodies#disable-hide-app
+# Отдельного события о подключении мониторов в AeroSpace нет,
+# поэтому раскладку окон проверяем хотя бы при смене монитора с фокусом.
+on-focused-monitor-changed = [
+    'move-mouse monitor-lazy-center',
+    'exec-and-forget /bin/bash __WS_SCRIPT__ sync',
+]
 automatically-unhide-macos-hidden-apps = true
 
-# Список рабочих пространств, которые должны существовать даже без окон,
-# в том числе когда они невидимы.
-# Этот параметр доступен только начиная с 'config-version = 2'
-# Значение по умолчанию (если параметр не указан): persistent-workspaces = []
-# persistent-workspaces = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B",
-#                         "C", "D", "E", "F", "G", "I", "M", "N", "O", "P", "Q",
-#                         "R", "S", "T", "U", "V", "W", "X", "Y", "Z"]
-# 4 воркспейса, переключаются через ctrl-s/h/m/o (см. [mode.main.binding] ниже) —
-# физические клавиши НЕ зависят от имени воркспейса, менять их не нужно при переименовании.
-# Порядок в списке ниже — это порядок группировки/цикла cmd-j/cmd-k (search → hacking →
-# main → other), а НЕ порядок физических клавиш и НЕ алфавит (по умолчанию AeroSpace
-# сам крутит workspace next/prev по алфавиту — здесь этот порядок переопределён явно,
-# см. cmd-j/cmd-k в [mode.main.binding]).
-persistent-workspaces = ["__WS_SEARCH__", "__WS_HACKING__", "__WS_MAIN__", "__WS_OTHER__"]
+# Восемь постоянных воркспейсов: по четыре на каждый внешний монитор.
+# *-mac сюда не входят: без встроенного экрана AeroSpace показывал бы их
+# на внешних мониторах. Они создаются, когда нужны, и исчезают пустыми.
+persistent-workspaces = [
+    "__WS_SEARCH__-top",
+    "__WS_HACKING__-top",
+    "__WS_MAIN__-top",
+    "__WS_OTHER__-top",
+    "__WS_SEARCH__-bottom",
+    "__WS_HACKING__-bottom",
+    "__WS_MAIN__-bottom",
+    "__WS_OTHER__-bottom",
+]
 
-# Все окна открываются как floating (не управляются тайлингом/accordion) — благодаря
-# этому Rectangle может свободно resize/двигать их, и aerospace никогда не "отжимает"
-# размер обратно. accordion остаётся настроен ниже на случай, если решите вернуть тайлинг
-# для части приложений через отдельные [[on-window-detected]] правила с if.app-id.
-#
-# ВАЖНО: срабатывает только ПЕРВОЕ совпавшее правило (AeroSpace останавливает обработку
-# после первого match, если не указан check-further-callbacks = true). Поэтому привязки
-# конкретных приложений к воркспейсам стоят выше общего "layout floating для всех" —
-# иначе до них просто не доходило бы дело. Правило срабатывает одинаково и для окна,
-# открытого при старте системы (см. after-startup-command выше), и для окна, которое
-# приложение открыло само по себе — источник не важен, важен только app-bundle-id.
+# Все окна по умолчанию плавающие.
+# При необходимости правила конкретных приложений можно добавить выше fallback.
 on-window-detected = [
-    # __WS_MAIN__: Twilight (Zen Browser)
-    { if = 'test %{app-bundle-id} = app.zen-browser.zen', run = ['layout floating', 'move-node-to-workspace __WS_MAIN__'] },
-    # __WS_OTHER__: Happ, Telegram, Spotify
-    { if = 'test %{app-bundle-id} = com.happ.www', run = ['layout floating', 'move-node-to-workspace __WS_OTHER__'] },
-    { if = 'test %{app-bundle-id} = ru.keepcoder.Telegram', run = ['layout floating', 'move-node-to-workspace __WS_OTHER__'] },
-    { if = 'test %{app-bundle-id} = com.spotify.client', run = ['layout floating', 'move-node-to-workspace __WS_OTHER__'] },
-    # Всё остальное — просто floating, без привязки к воркспейсу
+    # Примеры привязки приложений к воркспейсам:
+    # { if = 'test %{app-bundle-id} = app.zen-browser.zen', run = ['layout floating', 'move-node-to-workspace __WS_MAIN__-top'] },
+    # { if = 'test %{app-bundle-id} = com.happ.www', run = ['layout floating', 'move-node-to-workspace __WS_OTHER__-top'] },
+    # { if = 'test %{app-bundle-id} = ru.keepcoder.Telegram', run = ['layout floating', 'move-node-to-workspace __WS_OTHER__-top'] },
+    # { if = 'test %{app-bundle-id} = com.spotify.client', run = ['layout floating', 'move-node-to-workspace __WS_OTHER__-top'] },
+
     { if = 'true', run = 'layout floating' },
 ]
 
-# Callback, который выполняется каждый раз при изменении режима привязок клавиш
-# См.: https://nikitabobko.github.io/AeroSpace/guide#binding-modes
-# См.: https://nikitabobko.github.io/AeroSpace/commands#mode
 on-mode-changed = []
-
 focus-follows-mouse.enabled = false
-
-# Возможные значения: (qwerty|dvorak|colemak)
-# См. https://nikitabobko.github.io/AeroSpace/guide#key-mapping
 key-mapping.preset = 'qwerty'
 
-# Отступы между окнами (inner-*) и между краями монитора (outer-*).
-# Возможные значения:
-# - Постоянное значение: gaps.outer.top = 4
-# - Для каждого монитора: gaps.outer.top = [{ monitor.main = 16 }, { monitor."some-pattern" = 32 }, 24]
-#                 В этом примере 24 — значение по умолчанию, если совпадение не найдено.
-#                 Шаблон монитора такой же, как для 'workspace-to-monitor-force-assignment'.
-#                 См.:
-#                 https://nikitabobko.github.io/AeroSpace/guide#assign-workspaces-to-monitors
 gaps.inner.horizontal = 0
-gaps.inner.vertical =   0
-gaps.outer.left =       0
-gaps.outer.bottom =     0
-gaps.outer.top =        0
-gaps.outer.right =      0
+gaps.inner.vertical = 0
+gaps.outer.left = 0
+gaps.outer.bottom = 0
+gaps.outer.top = 0
+gaps.outer.right = 0
 
-# Объявление режима привязок 'main'
-# См.: https://nikitabobko.github.io/AeroSpace/guide#binding-modes
-# Режим привязок 'main' должен присутствовать всегда
-# Значение по умолчанию (если параметр не указан): mode.main.binding = {}
+# Таблицы ([...]) должны идти после всех корневых ключей:
+# всё, что ниже заголовка таблицы, попадает внутрь неё.
+
+# Монитор 1 — верхний, монитор 2 — нижний: номера идут по расположению мониторов.
+# Встроенный экран ищется по имени (регулярка без учёта регистра;
+# «встроен» — на случай русской локализации macOS).
+# Проверь соответствие через `aerospace list-monitors`.
+[workspace-to-monitor-force-assignment]
+  "__WS_SEARCH__-top" = 1
+  "__WS_HACKING__-top" = 1
+  "__WS_MAIN__-top" = 1
+  "__WS_OTHER__-top" = 1
+
+  "__WS_SEARCH__-bottom" = 2
+  "__WS_HACKING__-bottom" = 2
+  "__WS_MAIN__-bottom" = 2
+  "__WS_OTHER__-bottom" = 2
+
+  "__WS_SEARCH__-mac" = 'built-in|встроен'
+  "__WS_HACKING__-mac" = 'built-in|встроен'
+  "__WS_MAIN__-mac" = 'built-in|встроен'
+  "__WS_OTHER__-mac" = 'built-in|встроен'
+
 [mode.main.binding]
 
-    # Все возможные клавиши:
-    # - Буквы.         a, b, c, ..., z
-    # - Цифры.          0, 1, 2, ..., 9
-    # - Цифры на NumPad. keypad0, keypad1, keypad2, ..., keypad9
-    # - F-клавиши.      f1, f2, ..., f20
-    # - Специальные клавиши. minus, equal, period, comma, slash, backslash, quote, semicolon,
-    #                   backtick, leftSquareBracket, rightSquareBracket, space, enter, esc,
-    #                   backspace, tab, pageUp, pageDown, home, end, forwardDelete,
-    #                   sectionSign (только для ISO-клавиатур, только для европейских клавиатур)
-    # - Специальные клавиши NumPad. keypadClear, keypadDecimalMark, keypadDivide, keypadEnter, keypadEqual,
-    #                   keypadMinus, keypadMultiply, keypadPlus
-    # - Стрелки.        left, down, up, right
+# Раскладка окон
+alt-slash = 'layout tiles horizontal vertical'
+alt-comma = 'layout accordion horizontal vertical'
 
-    # Все возможные модификаторы: cmd, alt, ctrl, shift
+# Фокус между окнами
+alt-h = 'focus left'
+alt-j = 'focus down'
+alt-k = 'focus up'
+alt-l = 'focus right'
 
-    # Все доступные команды: https://nikitabobko.github.io/AeroSpace/commands
+# Перемещение окон внутри раскладки
+# (alt-shift-h занят переносом окна в hacking-bottom — см. ниже)
+alt-shift-j = 'move down'
+alt-shift-k = 'move up'
+alt-shift-l = 'move right'
 
-    # См.: https://nikitabobko.github.io/AeroSpace/commands#exec-and-forget
-    # Можно раскомментировать следующие строки, чтобы открывать терминал сочетанием alt + enter
-    # (как в i3)
-    # alt-enter = '''exec-and-forget osascript -e \
-    # 'tell application "Terminal" to tell (do script) to activate' '''
+# Перенос активного окна между вертикально расположенными мониторами
+ctrl-alt-j = 'move-node-to-monitor down'
+ctrl-alt-k = 'move-node-to-monitor up'
 
-    # См.: https://nikitabobko.github.io/AeroSpace/commands#layout
-    alt-slash = 'layout tiles horizontal vertical'
-    alt-comma = 'layout accordion horizontal vertical'
+# Перенос активного окна на монитор: 1 — ноутбук, 2 — верхний, 3 — нижний
+ctrl-alt-1 = 'exec-and-forget /bin/bash __WS_SCRIPT__ to-monitor mac'
+ctrl-alt-2 = 'exec-and-forget /bin/bash __WS_SCRIPT__ to-monitor top'
+ctrl-alt-3 = 'exec-and-forget /bin/bash __WS_SCRIPT__ to-monitor bottom'
 
-    # См.: https://nikitabobko.github.io/AeroSpace/commands#focus
-    alt-h = 'focus left'
-    alt-j = 'focus down'
-    alt-k = 'focus up'
-    alt-l = 'focus right'
+# Изменение размера
+alt-minus = 'resize smart -50'
+alt-equal = 'resize smart +50'
 
-    # См.: https://nikitabobko.github.io/AeroSpace/commands#move
-    alt-shift-h = 'move left'
-    alt-shift-j = 'move down'
-    alt-shift-k = 'move up'
-    alt-shift-l = 'move right'
+# Без внешних мониторов и верхние, и нижние хоткеи ведут в *-mac.
 
-    # См.: https://nikitabobko.github.io/AeroSpace/commands#resize
-    alt-minus = 'resize smart -50'
-    alt-equal = 'resize smart +50'
+# Перейти на воркспейс: cmd+ctrl — верхний монитор, cmd+shift — нижний
+ctrl-cmd-s = 'exec-and-forget /bin/bash __WS_SCRIPT__ focus __WS_SEARCH__ top'
+ctrl-cmd-h = 'exec-and-forget /bin/bash __WS_SCRIPT__ focus __WS_HACKING__ top'
+ctrl-cmd-m = 'exec-and-forget /bin/bash __WS_SCRIPT__ focus __WS_MAIN__ top'
+ctrl-cmd-o = 'exec-and-forget /bin/bash __WS_SCRIPT__ focus __WS_OTHER__ top'
 
-    # См.: https://nikitabobko.github.io/AeroSpace/commands#workspace
-    # ctrl-h выбран специально НЕ как ctrl-c: Ctrl-H в readline — это backspace, его
-    # никто не жмёт как осознанный chord (все жмут физический Backspace), в отличие от
-    # Ctrl-C (SIGINT) — тот ломать нельзя. Физические клавиши фиксированы и НЕ зависят
-    # от того, как воркспейс называется сейчас — имя подставляется из __WS_*__ при генерации.
-    ctrl-s = 'workspace __WS_SEARCH__'
-    ctrl-h = 'workspace __WS_HACKING__'
-    ctrl-m = 'workspace __WS_MAIN__'
-    ctrl-o = 'workspace __WS_OTHER__'
+cmd-shift-s = 'exec-and-forget /bin/bash __WS_SCRIPT__ focus __WS_SEARCH__ bottom'
+cmd-shift-h = 'exec-and-forget /bin/bash __WS_SCRIPT__ focus __WS_HACKING__ bottom'
+cmd-shift-m = 'exec-and-forget /bin/bash __WS_SCRIPT__ focus __WS_MAIN__ bottom'
+cmd-shift-o = 'exec-and-forget /bin/bash __WS_SCRIPT__ focus __WS_OTHER__ bottom'
 
-    # См.: https://nikitabobko.github.io/AeroSpace/commands#move-node-to-workspace
-    ctrl-shift-s = 'move-node-to-workspace __WS_SEARCH__'
-    ctrl-shift-h = 'move-node-to-workspace __WS_HACKING__'
-    ctrl-shift-m = 'move-node-to-workspace __WS_MAIN__'
-    ctrl-shift-o = 'move-node-to-workspace __WS_OTHER__'
+# Перенести активное окно на воркспейс: opt+ctrl — верхний монитор, opt+shift — нижний
+ctrl-alt-s = 'exec-and-forget /bin/bash __WS_SCRIPT__ move __WS_SEARCH__ top'
+ctrl-alt-h = 'exec-and-forget /bin/bash __WS_SCRIPT__ move __WS_HACKING__ top'
+ctrl-alt-m = 'exec-and-forget /bin/bash __WS_SCRIPT__ move __WS_MAIN__ top'
+ctrl-alt-o = 'exec-and-forget /bin/bash __WS_SCRIPT__ move __WS_OTHER__ top'
 
-    # Переключение между окнами внутри воркспейса (как обычный alt+tab в ОС).
-    # default-root-container-layout = 'accordion' + accordion-padding = 0 уже даёт
-    # поведение "окна друг за другом на весь экран", это только цикличная навигация по ним.
-    # См.: https://nikitabobko.github.io/AeroSpace/commands#focus
-    alt-tab = 'focus --wrap-around dfs-next'
-    alt-shift-tab = 'focus --wrap-around dfs-prev'
+alt-shift-s = 'exec-and-forget /bin/bash __WS_SCRIPT__ move __WS_SEARCH__ bottom'
+alt-shift-h = 'exec-and-forget /bin/bash __WS_SCRIPT__ move __WS_HACKING__ bottom'
+alt-shift-m = 'exec-and-forget /bin/bash __WS_SCRIPT__ move __WS_MAIN__ bottom'
+alt-shift-o = 'exec-and-forget /bin/bash __WS_SCRIPT__ move __WS_OTHER__ bottom'
 
-    # Было на alt-shift-tab — перенесено сюда, чтобы не конфликтовать с переключением окон выше.
-    # См.: https://nikitabobko.github.io/AeroSpace/commands#move-workspace-to-monitor
-    alt-shift-m = 'move-workspace-to-monitor --wrap-around next'
+# Циклическое переключение верхних воркспейсов: Cmd+J / Cmd+K
+cmd-j = 'exec-and-forget /bin/bash __WS_SCRIPT__ cycle prev top __WS_SEARCH__ __WS_HACKING__ __WS_MAIN__ __WS_OTHER__'
+cmd-k = 'exec-and-forget /bin/bash __WS_SCRIPT__ cycle next top __WS_SEARCH__ __WS_HACKING__ __WS_MAIN__ __WS_OTHER__'
 
-    # Переключение воркспейсов вперёд/назад по кругу (аналог cmd+j/k из Rectangle,
-    # но самодостаточное — не зависит от внешних тулов, переживёт переезд на другой Mac).
-    # По умолчанию AeroSpace крутит workspace next/prev по АЛФАВИТУ, что не совпадает
-    # с нужной группировкой (search, coding, main, other) — поэтому вместо лёгкой
-    # встроенной команды передаём явный порядок через --stdin: cmd-j = index-1 (prev),
-    # cmd-k = index+1 (next), с переносом через край (--wrap-around).
-    # См.: https://nikitabobko.github.io/AeroSpace/commands#workspace
-    cmd-j = '''exec-and-forget /bin/sh -c "printf '__WS_SEARCH__\n__WS_HACKING__\n__WS_MAIN__\n__WS_OTHER__\n' | /opt/homebrew/bin/aerospace workspace prev --stdin --wrap-around"'''
-    cmd-k = '''exec-and-forget /bin/sh -c "printf '__WS_SEARCH__\n__WS_HACKING__\n__WS_MAIN__\n__WS_OTHER__\n' | /opt/homebrew/bin/aerospace workspace next --stdin --wrap-around"'''
+# Циклическое переключение нижних воркспейсов: Ctrl+Option+Cmd+J / K
+ctrl-alt-cmd-j = 'exec-and-forget /bin/bash __WS_SCRIPT__ cycle prev bottom __WS_SEARCH__ __WS_HACKING__ __WS_MAIN__ __WS_OTHER__'
+ctrl-alt-cmd-k = 'exec-and-forget /bin/bash __WS_SCRIPT__ cycle next bottom __WS_SEARCH__ __WS_HACKING__ __WS_MAIN__ __WS_OTHER__'
 
-    # ctrl-shift-j / ctrl-shift-k сознательно НЕ забиндены здесь.
-    # AeroSpace не умеет resize в процентах и не двигает/центрирует окна — только
-    # tiling-разбиение и абсолютные пиксели. "Центр 80%" и "100% на весь экран" остаются
-    # хоткеями Rectangle как есть — эти комбинации просто проходят мимо aerospace к Rectangle
-    # без конфликта. Все окна теперь floating (см. on-window-detected выше), поэтому
-    # aerospace больше не отжимает размер обратно после ресайза — работает сразу, без
-    # ручного alt-shift-space перед каждым ресайзом.
+# Переключение между окнами
+alt-tab = 'focus --wrap-around dfs-next'
+alt-shift-tab = 'focus --wrap-around dfs-prev'
 
-    # См.: https://nikitabobko.github.io/AeroSpace/commands#mode
-    alt-shift-semicolon = 'mode service'
+# Сервисный режим
+alt-shift-semicolon = 'mode service'
+alt-shift-space = 'layout floating tiling'
 
-    alt-shift-space = 'layout floating tiling'
-
-# Объявление режима привязок 'service'.
-# См.: https://nikitabobko.github.io/AeroSpace/guide#binding-modes
 [mode.service.binding]
-    esc = ['reload-config', 'mode main']
-    r = ['flatten-workspace-tree', 'mode main'] # сбросить раскладку
-    f = ['layout floating tiling', 'mode main'] # Переключение между плавающей и мозаичной раскладкой
-    backspace = ['close-all-windows-but-current', 'mode main']
+  esc = ['reload-config', 'mode main']
+  r = ['flatten-workspace-tree', 'mode main']
+  f = ['layout floating tiling', 'mode main']
+  backspace = ['close-all-windows-but-current', 'mode main']
 
-    # sticky пока не поддерживается https://github.com/nikitabobko/AeroSpace/issues/2
-    #s = ['layout sticky tiling', 'mode main']
-
-    alt-shift-h = ['join-with left', 'mode main']
-    alt-shift-j = ['join-with down', 'mode main']
-    alt-shift-k = ['join-with up', 'mode main']
-    alt-shift-l = ['join-with right', 'mode main']
+  alt-shift-h = ['join-with left', 'mode main']
+  alt-shift-j = ['join-with down', 'mode main']
+  alt-shift-k = ['join-with up', 'mode main']
+  alt-shift-l = ['join-with right', 'mode main']
