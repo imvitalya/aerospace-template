@@ -5,19 +5,61 @@
 
 import AppKit
 
-let aerospace = "/opt/homebrew/bin/aerospace"
-let lockPath = NSHomeDirectory() + "/.local/state/aerospace/indicator.lock"
+let environment = ProcessInfo.processInfo.environment
+var commandEnvironment = environment
+commandEnvironment.removeValue(forKey: "AEROSPACE_WINDOW_ID")
+commandEnvironment.removeValue(forKey: "AEROSPACE_WORKSPACE")
+let searchPaths = (environment["PATH"] ?? "").split(separator: ":").map(String.init)
+    + ["/opt/homebrew/bin", "/usr/local/bin"]
+guard let aerospace = searchPaths.map({ $0 + "/aerospace" })
+    .first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+    fputs("aerospace не найден в PATH или Homebrew\n", stderr)
+    exit(1)
+}
+let stateHome = environment["XDG_STATE_HOME"] ?? NSHomeDirectory() + "/.local/state"
+let lockPath = stateHome + "/aerospace/indicator.lock"
 
-// Второй экземпляр ждёт, пока завершится первый, и только потом занимает меню-бар
-try? FileManager.default.createDirectory(
-    atPath: (lockPath as NSString).deletingLastPathComponent,
-    withIntermediateDirectories: true
-)
+// Повторный запуск не оставляет ожидающий процесс и не создаёт второй индикатор.
+do {
+    try FileManager.default.createDirectory(
+        atPath: (lockPath as NSString).deletingLastPathComponent,
+        withIntermediateDirectories: true
+    )
+} catch {
+    fputs("Не удалось создать каталог состояния: \(error)\n", stderr)
+    exit(1)
+}
 let lockFD = open(lockPath, O_CREAT | O_RDWR, 0o644)
-flock(lockFD, LOCK_EX)
+guard lockFD >= 0 else { perror("indicator lock"); exit(1) }
+guard fcntl(lockFD, F_SETFD, FD_CLOEXEC) == 0 else { perror("indicator lock flags"); exit(1) }
+if flock(lockFD, LOCK_EX | LOCK_NB) != 0 {
+    let alreadyRunning = errno == EWOULDBLOCK
+    if !alreadyRunning { perror("indicator lock") }
+    close(lockFD)
+    exit(alreadyRunning ? 0 : 1)
+}
+
+@MainActor final class IndicatorDelegate: NSObject, NSApplicationDelegate {
+    var subscription: Process?
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if let process = subscription, process.isRunning {
+            process.terminate()
+            process.waitUntilExit()
+        }
+    }
+}
 
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
+let delegate = MainActor.assumeIsolated { IndicatorDelegate() }
+app.delegate = delegate
+
+// pkill из генератора должен закрывать и дочерний `aerospace subscribe`.
+signal(SIGTERM, SIG_IGN)
+let termination = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+termination.setEventHandler { app.terminate(nil) }
+termination.resume()
 
 let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 item.button?.title = "…"
@@ -27,6 +69,7 @@ item.menu?.addItem(withTitle: "Выйти", action: #selector(NSApplication.term
 func focusedWorkspace() -> String? {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: aerospace)
+    process.environment = commandEnvironment
     process.arguments = ["list-workspaces", "--focused"]
     let pipe = Pipe()
     process.standardOutput = pipe
@@ -34,6 +77,7 @@ func focusedWorkspace() -> String? {
     guard (try? process.run()) != nil else { return nil }
     let data = pipe.fileHandleForReading.readDataToEndOfFile()
     process.waitUntilExit()
+    guard process.terminationStatus == 0 else { return nil }
     return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
@@ -49,24 +93,30 @@ func workspace(fromEvent line: String) -> String? {
 }
 
 // Обновляет заголовок, пока жив поток `aerospace subscribe`
-func listen() async {
+@MainActor func listen() async {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: aerospace)
+    process.environment = commandEnvironment
     process.arguments = ["subscribe", "focused-workspace-changed"]
     let pipe = Pipe()
     process.standardOutput = pipe
     process.standardError = FileHandle.nullDevice
     guard (try? process.run()) != nil else { return }
+    delegate.subscription = process
+    defer {
+        if process.isRunning { process.terminate() }
+        process.waitUntilExit()
+        delegate.subscription = nil
+    }
     do {
         for try await line in pipe.fileHandleForReading.bytes.lines {
             guard let workspace = workspace(fromEvent: line), !workspace.isEmpty else { continue }
-            await MainActor.run { item.button?.title = workspace }
+            item.button?.title = workspace
         }
     } catch {}
-    process.waitUntilExit()
 }
 
-Task.detached {
+Task { @MainActor in
     while true {
         await listen()
         // Поток оборвался: AeroSpace перезапускается или завершился

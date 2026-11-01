@@ -13,18 +13,50 @@ WS_HACKING="hacking"
 WS_MAIN="main"
 WS_OTHER="other"
 
-TEMPLATE="$HOME/.aerospace.template.toml"
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+if [ "$(basename -- "$0")" = .aerospace-render.sh ]; then
+    TEMPLATE="$SCRIPT_DIR/.aerospace.template.toml"
+    INDICATOR_SRC="$SCRIPT_DIR/.aerospace-indicator.swift"
+else
+    TEMPLATE="$SCRIPT_DIR/aerospace.template.toml"
+    INDICATOR_SRC="$SCRIPT_DIR/aerospace-indicator.swift"
+fi
 TARGET="$HOME/.aerospace.toml"
 WS_SCRIPT="$HOME/.aerospace-ws.sh"
-INDICATOR_SRC="$HOME/.aerospace-indicator.swift"
 INDICATOR_BIN="$HOME/.local/bin/aerospace-indicator"
 
-for file in "$TEMPLATE" "$WS_SCRIPT" "$INDICATOR_SRC"; do
+render_only=false
+if [ "$#" -gt 0 ]; then
+    if [ "$#" -eq 2 ] && [ "$1" = --output ]; then
+        TARGET=$2
+        render_only=true
+    else
+        echo "Использование: $0 [--output <файл>]" >&2
+        exit 2
+    fi
+fi
+
+for file in "$TEMPLATE"; do
     if [ ! -f "$file" ]; then
         echo "Файл не найден: $file" >&2
         exit 1
     fi
 done
+
+if ! "$render_only"; then
+    for file in "$WS_SCRIPT" "$INDICATOR_SRC"; do
+        [ -f "$file" ] || { echo "Файл не найден: $file" >&2; exit 1; }
+    done
+    command -v aerospace >/dev/null || { echo "Не найден aerospace в PATH" >&2; exit 1; }
+    loaded_config=$(aerospace config --config-path)
+    case "$loaded_config" in
+        "$TARGET"|*/AeroSpace.app/Contents/Resources/default-config.toml) ;;
+        *)
+            echo "AeroSpace использует $loaded_config, а генератор пишет $TARGET. Используйте --output для предпросмотра." >&2
+            exit 1
+            ;;
+    esac
+fi
 
 names=("$WS_SEARCH" "$WS_HACKING" "$WS_MAIN" "$WS_OTHER")
 
@@ -46,31 +78,68 @@ for i in "${!names[@]}"; do
     done
 done
 
+tmp=$(mktemp "${TARGET}.tmp.XXXXXX")
+binary_tmp=
+trap 'rm -f -- "$tmp"; if [ -n "$binary_tmp" ]; then rm -f -- "$binary_tmp"; fi' EXIT
 sed \
     -e "s/__WS_SEARCH__/$WS_SEARCH/g" \
     -e "s/__WS_HACKING__/$WS_HACKING/g" \
     -e "s/__WS_MAIN__/$WS_MAIN/g" \
     -e "s/__WS_OTHER__/$WS_OTHER/g" \
-    -e "s#__WS_SCRIPT__#$WS_SCRIPT#g" \
-    -e "s#__WS_INDICATOR__#$INDICATOR_BIN#g" \
-    "$TEMPLATE" > "$TARGET"
+    "$TEMPLATE" > "$tmp"
 
-echo "Сгенерирован $TARGET:"
-echo "  Воркспейсы: ${names[*]} (суффиксы -top, -bottom, -mac)"
+if grep -nE '__WS_[A-Z_]+__' "$tmp"; then
+    echo "В шаблоне остались неизвестные плейсхолдеры" >&2
+    exit 1
+fi
 
-# Индикатор для меню-бара пересобираем, только если исходник новее бинарника
+if "$render_only"; then
+    mv "$tmp" "$TARGET"
+    echo "Сгенерирован $TARGET (без установки, сборки и перезагрузки)"
+    exit 0
+fi
+
+# Сначала готовим исполняемый файл. Ошибка компиляции не затронет рабочий конфиг.
 if [ ! -x "$INDICATOR_BIN" ] || [ "$INDICATOR_SRC" -nt "$INDICATOR_BIN" ]; then
     mkdir -p "$(dirname "$INDICATOR_BIN")"
-    swiftc -O -o "$INDICATOR_BIN" "$INDICATOR_SRC"
+    binary_tmp=$(mktemp "${INDICATOR_BIN}.tmp.XXXXXX")
+    swiftc -O -o "$binary_tmp" "$INDICATOR_SRC"
+    mv "$binary_tmp" "$INDICATOR_BIN"
+    binary_tmp=
     echo "Собран $INDICATOR_BIN"
 fi
 
-if command -v aerospace >/dev/null 2>&1; then
-    aerospace reload-config
-    echo "AeroSpace конфиг перезагружен"
-
-    # Новый экземпляр дождётся выхода старого: индикатор держит блокировку
-    pkill -f "$INDICATOR_BIN" || true
-    nohup "$INDICATOR_BIN" >/dev/null 2>&1 &
-    echo "Индикатор перезапущен"
+backup=
+if [ -e "$TARGET" ]; then
+    backup=$(mktemp "${TARGET}.backup.XXXXXX")
+    cp -p "$TARGET" "$backup"
 fi
+mv "$tmp" "$TARGET"
+if ! aerospace reload-config --no-gui --warnings-as-errors; then
+    if [ -n "$backup" ]; then
+        cp -p "$backup" "$tmp"
+        mv "$tmp" "$TARGET"
+        aerospace reload-config --no-gui || true
+    else
+        rm -f -- "$TARGET"
+    fi
+    echo "Конфиг не принят AeroSpace; предыдущий файл восстановлен" >&2
+    exit 1
+fi
+echo "Сгенерирован и загружен $TARGET"
+echo "  Воркспейсы: ${names[*]} (суффиксы -top, -bottom, -mac)"
+[ -z "$backup" ] || echo "  Предыдущий конфиг: $backup"
+
+# Неблокирующий lock индикатора не создаёт очередь ожидающих процессов.
+# Дожидаемся освобождения старого экземпляра перед запуском нового.
+pkill -x aerospace-indicator || true
+for ((attempt=0; attempt<50; attempt++)); do
+    pgrep -x aerospace-indicator >/dev/null || break
+    sleep 0.1
+done
+if pgrep -x aerospace-indicator >/dev/null; then
+    echo "Конфиг загружен, но старый индикатор не завершился за 5 секунд" >&2
+    exit 1
+fi
+nohup "$INDICATOR_BIN" >/dev/null 2>&1 &
+echo "Индикатор перезапущен"
