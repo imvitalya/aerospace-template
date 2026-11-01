@@ -1,5 +1,5 @@
 // Индикатор AeroSpace для меню-бара: показывает только воркспейс с фокусом,
-// например «main-top», — без звёздочек и списка всех мониторов.
+// Например «main-top» при нескольких экранах или «main» при одном.
 // Собирается и перезапускается из ~/.aerospace-render.sh,
 // при старте AeroSpace запускается из after-startup-command.
 
@@ -39,8 +39,27 @@ if flock(lockFD, LOCK_EX | LOCK_NB) != 0 {
     exit(alreadyRunning ? 0 : 1)
 }
 
+func workspaceTitle(_ workspace: String, screenCount: Int) -> String {
+    guard screenCount == 1 else { return workspace }
+    for suffix in ["-mac", "-top", "-bottom"] where workspace.hasSuffix(suffix) {
+        return String(workspace.dropLast(suffix.count))
+    }
+    return workspace
+}
+
 @MainActor final class IndicatorDelegate: NSObject, NSApplicationDelegate {
     var subscription: Process?
+    var workspace = ""
+
+    func updateTitle(workspace: String? = nil) {
+        if let workspace { self.workspace = workspace }
+        guard !self.workspace.isEmpty else { return }
+        item.button?.title = workspaceTitle(self.workspace, screenCount: NSScreen.screens.count)
+    }
+
+    func applicationDidChangeScreenParameters(_ notification: Notification) {
+        updateTitle()
+    }
 
     func applicationWillTerminate(_ notification: Notification) {
         if let process = subscription, process.isRunning {
@@ -111,7 +130,7 @@ func workspace(fromEvent line: String) -> String? {
     do {
         for try await line in pipe.fileHandleForReading.bytes.lines {
             guard let workspace = workspace(fromEvent: line), !workspace.isEmpty else { continue }
-            item.button?.title = workspace
+            delegate.updateTitle(workspace: workspace)
         }
     } catch {}
 }
