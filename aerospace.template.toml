@@ -128,7 +128,7 @@ ctrl-cmd-h = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" focus __WS_HACK
 ctrl-cmd-m = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" focus __WS_MAIN__ top'
 ctrl-cmd-o = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" focus __WS_OTHER__ top'
 
-cmd-shift-s = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" focus __WS_INTERESTING__ bottom'
+cmd-shift-i = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" focus __WS_INTERESTING__ bottom'
 cmd-shift-h = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" focus __WS_HACKING__ bottom'
 cmd-shift-m = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" focus __WS_MAIN__ bottom'
 cmd-shift-o = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" focus __WS_OTHER__ bottom'

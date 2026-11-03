@@ -96,7 +96,7 @@ chmod +x ~/.aerospace-render.sh
 
 | Воркспейс | Клавиша | Перейти: верх | Перейти: низ | Перенести окно: верх | Перенести окно: низ |
 |---|---|---|---|---|---|
-| interesting | `s` | `cmd-ctrl-s` | `cmd-shift-s` | `alt-ctrl-s` | `alt-shift-s` |
+| interesting | `s` / `i` | `cmd-ctrl-s` | `cmd-shift-i` | `alt-ctrl-s` | `alt-shift-s` |
 | hacking | `h` | `cmd-ctrl-h` | `cmd-shift-h` | `alt-ctrl-h` | `alt-shift-h` |
 | main (основной) | `m` | `cmd-ctrl-m` | `cmd-shift-m` | `alt-ctrl-m` | `alt-shift-m` |
 | other | `o` | `cmd-ctrl-o` | `cmd-shift-o` | `alt-ctrl-o` | `alt-shift-o` |
@@ -107,7 +107,6 @@ chmod +x ~/.aerospace-render.sh
 - **Цикл**: `cmd-j` / `cmd-k` листают воркспейсы верхнего монитора назад / вперёд, `ctrl-alt-cmd-j` / `ctrl-alt-cmd-k` — нижнего. Порядок: `interesting → hacking → main → other → (снова interesting)`. Без внешних мониторов обе пары листают `*-mac`. Помощник считает следующий воркспейс от видимого воркспейса выбранного монитора, даже когда фокус находится на другом экране.
 
 **Конфликты.** AeroSpace перехватывает сочетания глобально, и до приложений они не доходят:
-- `cmd-shift-s` — «Сохранить как» почти везде;
 - `cmd-shift-h`, `cmd-shift-o`, `cmd-shift-m` в VS Code — замена по файлам, переход к символу, панель Problems;
 - `alt-shift-<буква>` — ввод спецсимволов с клавиатуры.
 
