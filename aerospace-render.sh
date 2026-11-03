@@ -8,7 +8,7 @@ set -euo pipefail
 # Базовые имена воркспейсов. К каждому добавляется суффикс монитора:
 # -top (верхний), -bottom (нижний), -mac (встроенный экран).
 # Суффиксы зашиты в ~/.aerospace-ws.sh.
-WS_SEARCH="search"
+WS_INTERESTING="interesting"
 WS_HACKING="hacking"
 WS_MAIN="main"
 WS_OTHER="other"
@@ -16,14 +16,11 @@ WS_OTHER="other"
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 if [ "$(basename -- "$0")" = .aerospace-render.sh ]; then
     TEMPLATE="$SCRIPT_DIR/.aerospace.template.toml"
-    INDICATOR_SRC="$SCRIPT_DIR/.aerospace-indicator.swift"
 else
     TEMPLATE="$SCRIPT_DIR/aerospace.template.toml"
-    INDICATOR_SRC="$SCRIPT_DIR/aerospace-indicator.swift"
 fi
 TARGET="$HOME/.aerospace.toml"
 WS_SCRIPT="$HOME/.aerospace-ws.sh"
-INDICATOR_BIN="$HOME/.local/bin/aerospace-indicator"
 
 render_only=false
 if [ "$#" -gt 0 ]; then
@@ -44,9 +41,7 @@ for file in "$TEMPLATE"; do
 done
 
 if ! "$render_only"; then
-    for file in "$WS_SCRIPT" "$INDICATOR_SRC"; do
-        [ -f "$file" ] || { echo "Файл не найден: $file" >&2; exit 1; }
-    done
+    [ -f "$WS_SCRIPT" ] || { echo "Файл не найден: $WS_SCRIPT" >&2; exit 1; }
     command -v aerospace >/dev/null || { echo "Не найден aerospace в PATH" >&2; exit 1; }
     loaded_config=$(aerospace config --config-path)
     case "$loaded_config" in
@@ -58,7 +53,7 @@ if ! "$render_only"; then
     esac
 fi
 
-names=("$WS_SEARCH" "$WS_HACKING" "$WS_MAIN" "$WS_OTHER")
+names=("$WS_INTERESTING" "$WS_HACKING" "$WS_MAIN" "$WS_OTHER")
 
 # Имена попадают в sed и в аргументы помощника — без пробелов и спецсимволов
 for name in "${names[@]}"; do
@@ -79,10 +74,9 @@ for i in "${!names[@]}"; do
 done
 
 tmp=$(mktemp "${TARGET}.tmp.XXXXXX")
-binary_tmp=
-trap 'rm -f -- "$tmp"; if [ -n "$binary_tmp" ]; then rm -f -- "$binary_tmp"; fi' EXIT
+trap 'rm -f -- "$tmp"' EXIT
 sed \
-    -e "s/__WS_SEARCH__/$WS_SEARCH/g" \
+    -e "s/__WS_INTERESTING__/$WS_INTERESTING/g" \
     -e "s/__WS_HACKING__/$WS_HACKING/g" \
     -e "s/__WS_MAIN__/$WS_MAIN/g" \
     -e "s/__WS_OTHER__/$WS_OTHER/g" \
@@ -95,18 +89,8 @@ fi
 
 if "$render_only"; then
     mv "$tmp" "$TARGET"
-    echo "Сгенерирован $TARGET (без установки, сборки и перезагрузки)"
+    echo "Сгенерирован $TARGET (без установки и перезагрузки)"
     exit 0
-fi
-
-# Сначала готовим исполняемый файл. Ошибка компиляции не затронет рабочий конфиг.
-if [ ! -x "$INDICATOR_BIN" ] || [ "$INDICATOR_SRC" -nt "$INDICATOR_BIN" ]; then
-    mkdir -p "$(dirname "$INDICATOR_BIN")"
-    binary_tmp=$(mktemp "${INDICATOR_BIN}.tmp.XXXXXX")
-    swiftc -O -o "$binary_tmp" "$INDICATOR_SRC"
-    mv "$binary_tmp" "$INDICATOR_BIN"
-    binary_tmp=
-    echo "Собран $INDICATOR_BIN"
 fi
 
 backup=
@@ -129,17 +113,3 @@ fi
 echo "Сгенерирован и загружен $TARGET"
 echo "  Воркспейсы: ${names[*]} (суффиксы -top, -bottom, -mac)"
 [ -z "$backup" ] || echo "  Предыдущий конфиг: $backup"
-
-# Неблокирующий lock индикатора не создаёт очередь ожидающих процессов.
-# Дожидаемся освобождения старого экземпляра перед запуском нового.
-pkill -x aerospace-indicator || true
-for ((attempt=0; attempt<50; attempt++)); do
-    pgrep -x aerospace-indicator >/dev/null || break
-    sleep 0.1
-done
-if pgrep -x aerospace-indicator >/dev/null; then
-    echo "Конфиг загружен, но старый индикатор не завершился за 5 секунд" >&2
-    exit 1
-fi
-nohup "$INDICATOR_BIN" >/dev/null 2>&1 &
-echo "Индикатор перезапущен"

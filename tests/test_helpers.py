@@ -51,12 +51,12 @@ class WorkspaceTests(unittest.TestCase):
         return result
 
     def test_cycle_bottom_from_top_focus(self):
-        self.run_helper("cycle", "next", "bottom", "search", "hacking", "main", "other")
+        self.run_helper("cycle", "next", "bottom", "interesting", "hacking", "main", "other")
         self.assertEqual(self.state["focused"], "main-bottom")
 
     def test_cycle_previous_wraps_on_target_monitor(self):
-        self.state["visible"]["2"] = "search-bottom"
-        self.run_helper("cycle", "prev", "bottom", "search", "hacking", "main", "other")
+        self.state["visible"]["2"] = "interesting-bottom"
+        self.run_helper("cycle", "prev", "bottom", "interesting", "hacking", "main", "other")
         self.assertEqual(self.state["focused"], "other-bottom")
 
     def test_move_keeps_original_window_during_sync(self):
@@ -109,7 +109,7 @@ class WorkspaceTests(unittest.TestCase):
 
     def test_callback_context_does_not_override_global_queries(self):
         self.env["AEROSPACE_WINDOW_ID"] = "20"
-        self.run_helper("cycle", "next", "top", "search", "hacking", "main", "other")
+        self.run_helper("cycle", "next", "top", "interesting", "hacking", "main", "other")
         self.assertEqual(self.state["focused"], "other-top")
         self.assertTrue(all(not context for context in self.state["contexts"]))
 
@@ -136,9 +136,43 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         content = self.output.read_text()
         self.assertIn('config-version = 2', content)
+        self.assertIn('"interesting-top"', content)
+        self.assertIn('"interesting-bottom"', content)
+        self.assertIn('"interesting-mac"', content)
         self.assertIn('"other-bottom"', content)
         self.assertIn('"$HOME/.aerospace-ws.sh"', content)
+        self.assertIn('focus interesting top', content)
+        self.assertIn('move interesting bottom', content)
+        self.assertNotIn('aerospace-indicator', content)
         self.assertNotIn('__WS_', content)
+
+    def test_install_without_indicator_reloads_and_keeps_backup(self):
+        home = self.root / "home with spaces"
+        home.mkdir()
+        for name in ("aerospace-render.sh", "aerospace.template.toml", "aerospace-ws.sh"):
+            shutil.copyfile(ROOT / name, home / ("." + name))
+        target = home / ".aerospace.toml"
+        target.write_text("previous config\n")
+        binary = self.root / "aerospace"
+        binary.write_text(
+            '#!/bin/sh\n'
+            'case "$*" in\n'
+            '  "config --config-path") printf "%s/.aerospace.toml\\n" "$HOME" ;;\n'
+            '  "reload-config --no-gui --warnings-as-errors") touch "$HOME/reloaded" ;;\n'
+            '  *) exit 2 ;;\n'
+            'esac\n'
+        )
+        binary.chmod(0o755)
+        env = dict(os.environ, HOME=str(home), PATH=str(self.root) + ":/usr/bin:/bin")
+        result = subprocess.run(["/bin/bash", str(home / ".aerospace-render.sh")],
+                                env=env, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((home / "reloaded").exists())
+        self.assertIn('"interesting-top"', target.read_text())
+        backups = list(home.glob(".aerospace.toml.backup.*"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_text(), "previous config\n")
+        self.assertEqual(list(home.glob(".aerospace.toml.tmp.*")), [])
 
     def test_unknown_placeholder_does_not_replace_output(self):
         self.output.write_text("existing config\n")

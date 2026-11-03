@@ -12,9 +12,6 @@ auto-reload-config = true
 
 after-startup-command = [
     'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" startup __WS_MAIN__',
-    # Индикатор в меню-баре: только воркспейс с фокусом, без звёздочки
-    # (~/.aerospace-indicator.swift, собирается в ~/.aerospace-render.sh)
-    'exec-and-forget "$HOME/.local/bin/aerospace-indicator"',
 ]
 
 enable-normalization-flatten-containers = true
@@ -36,11 +33,11 @@ automatically-unhide-macos-hidden-apps = true
 # *-mac сюда не входят: без встроенного экрана AeroSpace показывал бы их
 # на внешних мониторах. Они создаются, когда нужны, и исчезают пустыми.
 persistent-workspaces = [
-    "__WS_SEARCH__-top",
+    "__WS_INTERESTING__-top",
     "__WS_HACKING__-top",
     "__WS_MAIN__-top",
     "__WS_OTHER__-top",
-    "__WS_SEARCH__-bottom",
+    "__WS_INTERESTING__-bottom",
     "__WS_HACKING__-bottom",
     "__WS_MAIN__-bottom",
     "__WS_OTHER__-bottom",
@@ -77,17 +74,17 @@ gaps.outer.right = 0
 # «встроен» — на случай русской локализации macOS).
 # Проверь соответствие через `aerospace list-monitors`.
 [workspace-to-monitor-force-assignment]
-  "__WS_SEARCH__-top" = 1
+  "__WS_INTERESTING__-top" = 1
   "__WS_HACKING__-top" = 1
   "__WS_MAIN__-top" = 1
   "__WS_OTHER__-top" = 1
 
-  "__WS_SEARCH__-bottom" = 2
+  "__WS_INTERESTING__-bottom" = 2
   "__WS_HACKING__-bottom" = 2
   "__WS_MAIN__-bottom" = 2
   "__WS_OTHER__-bottom" = 2
 
-  "__WS_SEARCH__-mac" = 'built-in|встроен'
+  "__WS_INTERESTING__-mac" = 'built-in|встроен'
   "__WS_HACKING__-mac" = 'built-in|встроен'
   "__WS_MAIN__-mac" = 'built-in|встроен'
   "__WS_OTHER__-mac" = 'built-in|встроен'
@@ -126,34 +123,34 @@ alt-equal = 'resize smart +50'
 # Без внешних мониторов и верхние, и нижние хоткеи ведут в *-mac.
 
 # Перейти на воркспейс: cmd+ctrl — верхний монитор, cmd+shift — нижний
-ctrl-cmd-s = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" focus __WS_SEARCH__ top'
+ctrl-cmd-s = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" focus __WS_INTERESTING__ top'
 ctrl-cmd-h = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" focus __WS_HACKING__ top'
 ctrl-cmd-m = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" focus __WS_MAIN__ top'
 ctrl-cmd-o = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" focus __WS_OTHER__ top'
 
-cmd-shift-s = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" focus __WS_SEARCH__ bottom'
+cmd-shift-s = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" focus __WS_INTERESTING__ bottom'
 cmd-shift-h = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" focus __WS_HACKING__ bottom'
 cmd-shift-m = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" focus __WS_MAIN__ bottom'
 cmd-shift-o = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" focus __WS_OTHER__ bottom'
 
 # Перенести активное окно на воркспейс: opt+ctrl — верхний монитор, opt+shift — нижний
-ctrl-alt-s = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" move __WS_SEARCH__ top'
+ctrl-alt-s = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" move __WS_INTERESTING__ top'
 ctrl-alt-h = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" move __WS_HACKING__ top'
 ctrl-alt-m = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" move __WS_MAIN__ top'
 ctrl-alt-o = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" move __WS_OTHER__ top'
 
-alt-shift-s = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" move __WS_SEARCH__ bottom'
+alt-shift-s = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" move __WS_INTERESTING__ bottom'
 alt-shift-h = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" move __WS_HACKING__ bottom'
 alt-shift-m = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" move __WS_MAIN__ bottom'
 alt-shift-o = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" move __WS_OTHER__ bottom'
 
 # Циклическое переключение верхних воркспейсов: Cmd+J / Cmd+K
-cmd-j = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" cycle prev top __WS_SEARCH__ __WS_HACKING__ __WS_MAIN__ __WS_OTHER__'
-cmd-k = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" cycle next top __WS_SEARCH__ __WS_HACKING__ __WS_MAIN__ __WS_OTHER__'
+cmd-j = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" cycle prev top __WS_INTERESTING__ __WS_HACKING__ __WS_MAIN__ __WS_OTHER__'
+cmd-k = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" cycle next top __WS_INTERESTING__ __WS_HACKING__ __WS_MAIN__ __WS_OTHER__'
 
 # Циклическое переключение нижних воркспейсов: Ctrl+Option+Cmd+J / K
-ctrl-alt-cmd-j = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" cycle prev bottom __WS_SEARCH__ __WS_HACKING__ __WS_MAIN__ __WS_OTHER__'
-ctrl-alt-cmd-k = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" cycle next bottom __WS_SEARCH__ __WS_HACKING__ __WS_MAIN__ __WS_OTHER__'
+ctrl-alt-cmd-j = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" cycle prev bottom __WS_INTERESTING__ __WS_HACKING__ __WS_MAIN__ __WS_OTHER__'
+ctrl-alt-cmd-k = 'exec-and-forget /bin/bash "$HOME/.aerospace-ws.sh" cycle next bottom __WS_INTERESTING__ __WS_HACKING__ __WS_MAIN__ __WS_OTHER__'
 
 # Переключение между окнами
 alt-tab = 'focus --wrap-around dfs-next'
