@@ -11,25 +11,36 @@ ROOT = Path(__file__).resolve().parents[1]
 HELPER = Path(os.environ.get("HELPER_UNDER_TEST", str(ROOT / "aerospace-ws.sh")))
 
 
+INSTALL_FILES = ["aerospace-ws.sh","aerospace-layout.py","aerospace-screens.js","aerospace-render.sh","aerospace.template.toml"]
+
+
+def fake_tools(root):
+    for name in ("aerospace", "osascript"):
+        binary = root / name
+        shutil.copyfile(ROOT / "tests/fake_aerospace.py", binary)
+        binary.chmod(0o755)
+
+
+def install_sources(home):
+    for name in INSTALL_FILES:
+        shutil.copyfile(ROOT / name, home / ("." + name))
+
+
 class WorkspaceTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="aerospace-test-")
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        binary = self.root / "aerospace"
-        shutil.copyfile(ROOT / "tests/fake_aerospace.py", binary)
-        binary.chmod(0o755)
-        ioreg = self.root / "ioreg"
-        ioreg.write_text('#!/usr/bin/env python3\nimport json, os\n'
-                         'mode = json.load(open(os.environ["AEROSPACE_TEST_STATE"]))["mode"]\n'
-                         'print(\'"AppleClamshellState" = \' + ("Yes" if mode == "ext" else "No"))\n')
-        ioreg.chmod(0o755)
+        fake_tools(self.root)
+        home = self.root / "home"
+        home.mkdir()
+        install_sources(home)
         self.state_file = self.root / "server.json"
         self.state_dir = self.root / "state/aerospace"
         self.state_dir.mkdir(parents=True)
         self.mode_file = self.state_dir / "mode"
         self.origins = self.state_dir / "origins"
-        self.env = dict(os.environ, PATH=str(self.root) + ":/usr/bin:/bin",
+        self.env = dict(os.environ, HOME=str(home), PATH=str(self.root) + ":/usr/bin:/bin",
                         XDG_STATE_HOME=str(self.root / "state"), AEROSPACE_TEST_STATE=str(self.state_file))
         for key in ("AEROSPACE_WS_LOCKED", "AEROSPACE_WINDOW_ID", "AEROSPACE_WORKSPACE"):
             self.env.pop(key, None)
@@ -117,6 +128,108 @@ class WorkspaceTests(unittest.TestCase):
         self.run_helper("cycle", "wrong", "bottom", "main", success=False)
         self.assertEqual(self.state.get("calls", []), [])
 
+    def test_rotate_and_use_old_binding_without_losing_windows_or_neighbor(self):
+        self.state["mode"] = "horizontal"
+        self.run_helper("focus", "interesting", "bottom")
+        self.assertEqual(self.state["visible"], {"1": "main-left", "2": "interesting-right"})
+        self.assertEqual(self.state["windows"]["10"]["workspace"], "main-left")
+        self.assertEqual(self.state["windows"]["20"]["workspace"], "hacking-right")
+        self.state["mode"] = "ext"
+        self.run_helper("focus", "interesting", "right")
+        self.assertEqual(self.state["visible"], {"1": "main-top", "2": "interesting-bottom"})
+        self.assertEqual(self.state["windows"]["20"]["workspace"], "hacking-bottom")
+        reloads = self.state["calls"].count(["reload-config", "--no-gui", "--warnings-as-errors"])
+        self.run_helper("sync")
+        self.assertEqual(self.state["calls"].count(["reload-config", "--no-gui", "--warnings-as-errors"]), reloads)
+
+    def test_single_external_and_laptop_remember_second_window(self):
+        self.state["mode"] = "horizontal"
+        self.run_helper("sync")
+        self.state.update(mode="one", visible={"1": "main-left"})
+        self.run_helper("sync")
+        self.assertEqual(self.state["windows"]["20"]["workspace"], "hacking")
+        self.run_helper("focus", "main", "right")
+        self.assertEqual(self.state["focused"], "main")
+        self.state.update(mode="mac", visible={"1": "main"}, focused="main")
+        self.run_helper("sync")
+        self.state["windows"]["20"]["workspace"] = "other-mac"
+        self.state.update(mode="horizontal", visible={"1": "main-mac", "2": "1"})
+        self.run_helper("sync")
+        self.assertEqual(self.state["windows"]["20"]["workspace"], "other-right")
+
+    def test_migration_resumes_across_another_rotation(self):
+        self.state["mode"] = "horizontal"
+        self.state["fail_moves"] = ["20"]
+        self.run_helper("sync", success=False)
+        self.assertTrue((self.state_dir / "transition.json").exists())
+        self.state["fail_moves"] = []
+        self.state["mode"] = "ext"
+        self.run_helper("sync")
+        self.assertEqual(self.state["windows"]["10"]["workspace"], "main-top")
+        self.assertEqual(self.state["windows"]["20"]["workspace"], "hacking-bottom")
+        self.assertFalse((self.state_dir / "transition.json").exists())
+
+    def test_initial_swap_uses_actual_screen_and_retries_only_remaining_window(self):
+        self.state["screens"] = [(100, -1440, False), (0, 0, False)]
+        self.state["fail_moves"] = ["20"]
+        self.run_helper("sync", success=False)
+        self.state["fail_moves"] = []
+        self.run_helper("sync")
+        self.assertEqual(self.state["windows"]["10"]["workspace"], "main-bottom")
+        self.assertEqual(self.state["windows"]["20"]["workspace"], "hacking-top")
+
+    def test_adjacent_moves_to_visible_workspace_of_other_external(self):
+        self.state["mode"] = "horizontal"
+        self.run_helper("adjacent", "next")
+        self.assertEqual(self.state["windows"]["10"]["workspace"], "hacking-right")
+
+    def test_sync_preserves_the_specific_focused_window(self):
+        self.state["mode"] = "horizontal"
+        self.state["windows"]["11"] = {"workspace": "main-top", "monitor": "1"}
+        self.state["focused_window"] = "11"
+        self.run_helper("sync")
+        self.assertEqual(self.state["focused_window"], "11")
+
+    def test_move_reported_as_success_but_not_applied_keeps_journal(self):
+        self.state.update(mode="horizontal", ignore_moves=["20"])
+        self.run_helper("sync", success=False)
+        self.assertTrue((self.state_dir / "transition.json").is_file())
+        self.state["ignore_moves"] = []
+        self.run_helper("sync")
+        self.assertEqual(self.state["windows"]["20"]["workspace"], "hacking-right")
+
+    def test_folded_window_can_be_sent_to_builtin_while_external_is_connected(self):
+        self.state.update(screens=[(0, 0, False), (2560, 0, True)],
+                          visible={"1": "main", "2": "other-mac"}, focused="main")
+        self.state["windows"]["10"].update(workspace="main", monitor="1")
+        self.run_helper("sync")
+        self.env["AEROSPACE_WINDOW_ID"] = "10"
+        self.run_helper("to-monitor", "mac")
+        self.run_helper("sync")
+        self.assertEqual(self.state["windows"]["10"]["workspace"], "other-mac")
+
+    def test_first_install_matches_external_even_when_old_top_was_on_mac(self):
+        self.state.update(screens=[(-2560, 0, True), (0, 0, False), (2560, 0, False)],
+                          visible={"1": "main-top", "2": "hacking-bottom", "3": "1"})
+        self.run_helper("sync")
+        self.assertEqual(self.state["windows"]["20"]["workspace"], "hacking-left")
+        self.assertEqual(self.state["windows"]["10"]["workspace"], "main-right")
+
+    def test_legacy_laptop_origin_uses_actual_monitor_of_old_workspace(self):
+        self.state["screens"] = [(100, -1440, False), (0, 0, False)]
+        self.state["pins"] = {"main-top": "1", "main-bottom": "2"}
+        self.state["windows"]["10"]["workspace"] = "main-mac"
+        self.origins.write_text("10 bottom\n")
+        self.run_helper("sync")
+        self.assertEqual(self.state["windows"]["10"]["workspace"], "main-top")
+
+    def test_restore_visible_bases_when_aerospace_temporarily_shows_numeric_workspaces(self):
+        self.state["mode"] = "horizontal"
+        self.run_helper("focus", "other", "right")
+        self.state.update(mode="ext", visible={"1": "1", "2": "2"}, focused="1", focused_window=None)
+        self.run_helper("sync")
+        self.assertEqual(self.state["visible"], {"1": "main-top", "2": "other-bottom"})
+
 
 class RenderTests(unittest.TestCase):
     def setUp(self):
@@ -149,26 +262,20 @@ class RenderTests(unittest.TestCase):
     def test_install_without_indicator_reloads_and_keeps_backup(self):
         home = self.root / "home with spaces"
         home.mkdir()
-        for name in ("aerospace-render.sh", "aerospace.template.toml", "aerospace-ws.sh"):
-            shutil.copyfile(ROOT / name, home / ("." + name))
+        install_sources(home)
         target = home / ".aerospace.toml"
         target.write_text("previous config\n")
-        binary = self.root / "aerospace"
-        binary.write_text(
-            '#!/bin/sh\n'
-            'case "$*" in\n'
-            '  "config --config-path") printf "%s/.aerospace.toml\\n" "$HOME" ;;\n'
-            '  "reload-config --no-gui --warnings-as-errors") touch "$HOME/reloaded" ;;\n'
-            '  *) exit 2 ;;\n'
-            'esac\n'
-        )
-        binary.chmod(0o755)
-        env = dict(os.environ, HOME=str(home), PATH=str(self.root) + ":/usr/bin:/bin")
+        fake_tools(self.root)
+        state = self.root / "aerospace.json"
+        state.write_text(json.dumps({"mode": "horizontal", "visible": {"1": "main-top", "2": "main-bottom"},
+                                     "focused": "main-top", "windows": {}}))
+        env = dict(os.environ, HOME=str(home), PATH=str(self.root) + ":/usr/bin:/bin",
+                   XDG_STATE_HOME=str(home / ".state"), AEROSPACE_TEST_STATE=str(state))
         result = subprocess.run(["/bin/bash", str(home / ".aerospace-render.sh")],
                                 env=env, capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue((home / "reloaded").exists())
-        self.assertIn('"interesting-top"', target.read_text())
+        self.assertIn(["reload-config", "--no-gui", "--warnings-as-errors"], json.loads(state.read_text())["calls"])
+        self.assertIn('"interesting-left"', target.read_text())
         backups = list(home.glob(".aerospace.toml.backup.*"))
         self.assertEqual(len(backups), 1)
         self.assertEqual(backups[0].read_text(), "previous config\n")

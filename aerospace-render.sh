@@ -5,9 +5,7 @@
 
 set -euo pipefail
 
-# Базовые имена воркспейсов. К каждому добавляется суффикс монитора:
-# -top (верхний), -bottom (нижний), -mac (встроенный экран).
-# Суффиксы зашиты в ~/.aerospace-ws.sh.
+# Базовые имена четырех независимых групп.
 WS_INTERESTING="interesting"
 WS_HACKING="hacking"
 WS_MAIN="main"
@@ -21,37 +19,6 @@ else
 fi
 TARGET="$HOME/.aerospace.toml"
 WS_SCRIPT="$HOME/.aerospace-ws.sh"
-
-render_only=false
-if [ "$#" -gt 0 ]; then
-    if [ "$#" -eq 2 ] && [ "$1" = --output ]; then
-        TARGET=$2
-        render_only=true
-    else
-        echo "Использование: $0 [--output <файл>]" >&2
-        exit 2
-    fi
-fi
-
-for file in "$TEMPLATE"; do
-    if [ ! -f "$file" ]; then
-        echo "Файл не найден: $file" >&2
-        exit 1
-    fi
-done
-
-if ! "$render_only"; then
-    [ -f "$WS_SCRIPT" ] || { echo "Файл не найден: $WS_SCRIPT" >&2; exit 1; }
-    command -v aerospace >/dev/null || { echo "Не найден aerospace в PATH" >&2; exit 1; }
-    loaded_config=$(aerospace config --config-path)
-    case "$loaded_config" in
-        "$TARGET"|*/AeroSpace.app/Contents/Resources/default-config.toml) ;;
-        *)
-            echo "AeroSpace использует $loaded_config, а генератор пишет $TARGET. Используйте --output для предпросмотра." >&2
-            exit 1
-            ;;
-    esac
-fi
 
 names=("$WS_INTERESTING" "$WS_HACKING" "$WS_MAIN" "$WS_OTHER")
 
@@ -73,6 +40,66 @@ for i in "${!names[@]}"; do
     done
 done
 
+# В одном внешнем режиме имя без суффикса должно оставаться однозначным.
+for name in "${names[@]}"; do
+    for other in "${names[@]}"; do
+        for side in left right top bottom mac; do
+            [ "$name" != "$other-$side" ] || { echo "Пересекаются имена '$name' и '$other'" >&2; exit 1; }
+        done
+    done
+done
+if [ "${1:-}" = --names ] && [ "$#" -eq 1 ]; then
+    echo "${names[*]}"
+    exit 0
+fi
+
+if [ "$#" -eq 0 ]; then
+    exec /bin/bash "$WS_SCRIPT" sync --force
+fi
+layout='top=1 bottom=2 mac=3'
+render_only=false
+case "$1" in
+    --output)
+        [ "$#" -eq 2 ] || { [ "$#" -eq 4 ] && [ "$3" = --layout ]; } || exit 2
+        render_only=true
+        TARGET=$2
+        layout=${4:-$layout}
+        ;;
+    --apply-layout)
+        [ "$#" -eq 2 ] && [ -n "${AEROSPACE_WS_LOCKED:-}" ] || exit 2
+        layout=$2
+        loaded_config=$(aerospace config --config-path)
+        case "$loaded_config" in
+            "$TARGET"|*/AeroSpace.app/Contents/Resources/default-config.toml) ;;
+            *) echo "AeroSpace использует $loaded_config вместо $TARGET" >&2; exit 1 ;;
+        esac
+        ;;
+    *) echo "Использование: $0 [--output файл [--layout 'left=1 right=2']]" >&2; exit 2 ;;
+esac
+number='[1-9][0-9]*'
+pattern="^(left=$number right=$number|top=$number bottom=$number|single=$number)( mac=$number)?$"
+[[ "$layout" =~ $pattern || "$layout" =~ ^mac=$number$ ]] || { echo "Некорректная расстановка: $layout" >&2; exit 2; }
+
+first_key=left second_key=right first_suffix=
+case "$layout" in
+    top=*) first_key=top; second_key=bottom; first_suffix=-top ;;
+    left=*) first_suffix=-left ;;
+    mac=*) first_suffix=-mac ;;
+esac
+persistent= assignments= seen=' '
+for item in $layout; do
+    side=${item%=*}
+    monitor=${item#*=}
+    [[ "$seen" != *" $monitor "* ]] || { echo "Повтор номера монитора $monitor" >&2; exit 2; }
+    seen+="$monitor "
+    for base in "${names[@]}"; do
+        ws=$base
+        [ "$side" = single ] || ws="$base-$side"
+        [ "$side" = mac ] || persistent+="${persistent:+, }\"$ws\""
+        assignments+="  \"$ws\" = $monitor"$'\n'
+    done
+done
+
 tmp=$(mktemp "${TARGET}.tmp.XXXXXX")
 trap 'rm -f -- "$tmp"' EXIT
 sed \
@@ -80,7 +107,14 @@ sed \
     -e "s/__WS_HACKING__/$WS_HACKING/g" \
     -e "s/__WS_MAIN__/$WS_MAIN/g" \
     -e "s/__WS_OTHER__/$WS_OTHER/g" \
-    "$TEMPLATE" > "$tmp"
+    -e "s/__WS_FIRST_KEY__/$first_key/g" \
+    -e "s/__WS_SECOND_KEY__/$second_key/g" \
+    -e "s/__WS_FIRST_SUFFIX__/$first_suffix/g" \
+    -e "s/__WS_PERSISTENT__/$persistent/g" \
+    "$TEMPLATE" | WS_ASSIGNMENTS="$assignments" awk '
+        $0 == "__WS_ASSIGNMENTS__" { printf "%s", ENVIRON["WS_ASSIGNMENTS"]; next }
+        { print }
+    ' > "$tmp"
 
 if grep -nE '__WS_[A-Z_]+__' "$tmp"; then
     echo "В шаблоне остались неизвестные плейсхолдеры" >&2
@@ -93,6 +127,9 @@ if "$render_only"; then
     exit 0
 fi
 
+if [ "$loaded_config" = "$TARGET" ] && [ -f "$TARGET" ] && cmp -s "$tmp" "$TARGET"; then
+    exit 0
+fi
 backup=
 if [ -e "$TARGET" ]; then
     backup=$(mktemp "${TARGET}.backup.XXXXXX")
@@ -111,5 +148,5 @@ if ! aerospace reload-config --no-gui --warnings-as-errors; then
     exit 1
 fi
 echo "Сгенерирован и загружен $TARGET"
-echo "  Воркспейсы: ${names[*]} (суффиксы -top, -bottom, -mac)"
+echo "  Расстановка: $layout"
 [ -z "$backup" ] || echo "  Предыдущий конфиг: $backup"
